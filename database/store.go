@@ -1,3 +1,21 @@
+/*
+MIT License
+
+Copyright (c) 2025 Первый Бит
+
+Данная лицензия разрешает использование, копирование, изменение, слияние, публикацию, распространение,
+лицензирование и/или продажу копий программного обеспечения при соблюдении следующих условий:
+
+В вышеуказанном уведомлении об авторских правах и данном уведомлении о разрешении должны быть включены все копии
+или значимые части программного обеспечения.
+
+ПРОГРАММНОЕ ОБЕСПЕЧЕНИЕ ПРЕДОСТАВЛЯЕТСЯ "КАК ЕСТЬ", БЕЗ ГАРАНТИЙ ЛЮБОГО РОДА, ЯВНЫХ ИЛИ ПОДРАЗУМЕВАЕМЫХ,
+ВКЛЮЧАЯ, НО НЕ ОГРАНИЧИВАЯСЬ, ГАРАНТИЯМИ КОММЕРЧЕСКОЙ ПРИГОДНОСТИ, СООТВЕТСТВИЯ ДЛЯ ОПРЕДЕЛЕННОЙ ЦЕЛИ И
+НЕНАРУШЕНИЯ ПРАВ. НИ В КОЕМ СЛУЧАЕ АВТОРЫ ИЛИ ПРАВООБЛАДАТЕЛИ НЕ НЕСУТ ОТВЕТСТВЕННОСТИ ПО ИСКАМ,
+УСЛОВИЯМ, ДАМГЕ или другим обязательствам, возникающим из, или в связи с использованием, или иным образом
+связанным с данным программным обеспечением.
+*/
+
 package database
 
 import (
@@ -5,45 +23,56 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/IT-Nick/tasks"
 )
 
-// GlobalStore может быть установлен в main для доступа из middleware.
+// GlobalStore представляет глобальное хранилище состояния пользователей.
+// Оно может быть установлено в main для обеспечения доступа к состояниям из middleware и других модулей.
 var GlobalStore Store
 
-// UserState представляет данные, связанные с пользователем.
+// UserState описывает состояние пользователя в системе.
+// Содержит информацию о роли, состоянии тестирования, текущем прогрессе, а также данные, необходимые для работы таймера.
 type UserState struct {
-	Role              string       `json:"role"`                // Роль: "user", "hr", "admin"
-	State             string       `json:"state"`               // Текущее состояние: "welcome", "assigned", "testing", "finished"
-	CurrentQuestion   int          `json:"current_question"`    // Индекс текущего вопроса
+	Role              string       `json:"role"`                // Роль пользователя (например, "user", "hr", "admin")
+	State             string       `json:"state"`               // Текущее состояние (например, "welcome", "testing", "finished")
+	CurrentQuestion   int          `json:"current_question"`    // Индекс текущего вопроса теста
 	Score             int          `json:"score"`               // Количество правильных ответов
-	TestTasks         []tasks.Task `json:"test_tasks"`          // Набор вопросов для теста
-	Answers           map[int]int  `json:"answers"`             // Выбранные ответы: ключ – индекс вопроса, значение – индекс варианта
-	TelegramUsername  string       `json:"telegram_username"`   // Ник пользователя
-	TelegramFirstName string       `json:"telegram_first_name"` // Имя пользователя
-	// AssignedBy – ID HR или admin, который назначил тест кандидату (в виде строки).
-	AssignedBy string `json:"assigned_by"`
+	TestTasks         []tasks.Task `json:"test_tasks"`          // Список тестовых вопросов, назначенных пользователю
+	Answers           map[int]int  `json:"answers"`             // Карта, где ключ – индекс вопроса, значение – выбранный вариант ответа
+	TelegramUsername  string       `json:"telegram_username"`   // Telegram-username пользователя
+	TelegramFirstName string       `json:"telegram_first_name"` // Имя пользователя в Telegram
+	AssignedBy        string       `json:"assigned_by"`         // Имя пользователя, назначившего тест
+	AssignedByID      int64        `json:"assigned_by_id"`      // ID пользователя, назначившего тест
+
+	// Поля для работы с таймером теста.
+	TimerMessageID    int       `json:"timer_message_id"`    // ID сообщения, содержащего таймер
+	TimerDeadline     time.Time `json:"timer_deadline"`      // Время, до которого пользователь должен завершить тест
+	QuestionMessageID int       `json:"question_message_id"` // (Опционально) ID сообщения с текущим вопросом
 }
 
-// Store определяет интерфейс для работы с состоянием.
+// Store определяет интерфейс для работы с состояниями пользователей.
+// Позволяет получать, сохранять и удалять состояния по ID пользователя.
 type Store interface {
 	Get(userID int64) (UserState, bool)
 	Set(userID int64, state UserState) error
 	Delete(userID int64) error
 }
 
-// MemoryStore — in‑memory реализация.
+// MemoryStore представляет реализацию Store с хранением данных в оперативной памяти.
 type MemoryStore struct {
-	data map[int64]UserState
-	mu   sync.RWMutex
+	data map[int64]UserState // Карта состояний пользователей, индексированная по userID.
+	mu   sync.RWMutex        // RWMutex обеспечивает потокобезопасный доступ к данным.
 }
 
-// NewMemoryStore создаёт новый MemoryStore.
+// NewMemoryStore создает и возвращает новый экземпляр MemoryStore.
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{data: make(map[int64]UserState)}
 }
 
+// Get возвращает состояние пользователя по его ID.
+// Если состояние найдено, возвращается состояние и true, иначе – false.
 func (m *MemoryStore) Get(userID int64) (UserState, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -51,6 +80,7 @@ func (m *MemoryStore) Get(userID int64) (UserState, bool) {
 	return state, ok
 }
 
+// Set сохраняет или обновляет состояние пользователя по его ID.
 func (m *MemoryStore) Set(userID int64, state UserState) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -58,6 +88,7 @@ func (m *MemoryStore) Set(userID int64, state UserState) error {
 	return nil
 }
 
+// Delete удаляет состояние пользователя по его ID.
 func (m *MemoryStore) Delete(userID int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -65,13 +96,14 @@ func (m *MemoryStore) Delete(userID int64) error {
 	return nil
 }
 
-// JSONStore — реализация, сохраняющая данные в JSON-файл.
+// JSONStore представляет реализацию Store с сохранением данных в JSON-файл.
 type JSONStore struct {
-	filename string
-	mu       sync.Mutex
+	filename string     // Путь к JSON-файлу, где хранятся состояния.
+	mu       sync.Mutex // Mutex обеспечивает эксклюзивный доступ при чтении/записи файла.
 }
 
-// NewJSONStore создаёт новый JSONStore с указанным файлом.
+// NewJSONStore создает новый экземпляр JSONStore.
+// Если указанный файл не существует, он создается с пустой начальной структурой.
 func NewJSONStore(filename string) *JSONStore {
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		initial := make(map[int64]UserState)
@@ -81,6 +113,7 @@ func NewJSONStore(filename string) *JSONStore {
 	return &JSONStore{filename: filename}
 }
 
+// load считывает и десериализует данные из JSON-файла, содержащего состояния пользователей.
 func (j *JSONStore) load() (map[int64]UserState, error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -98,6 +131,8 @@ func (j *JSONStore) load() (map[int64]UserState, error) {
 	return m, nil
 }
 
+// save сериализует данные и сохраняет их в JSON-файл.
+// Функция возвращает ошибку, если не удалось выполнить сериализацию или запись в файл.
 func (j *JSONStore) save(m map[int64]UserState) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -111,6 +146,8 @@ func (j *JSONStore) save(m map[int64]UserState) error {
 	return nil
 }
 
+// Get возвращает состояние пользователя по его ID из JSON-файла.
+// Если произошла ошибка при загрузке или состояние не найдено, возвращается false.
 func (j *JSONStore) Get(userID int64) (UserState, bool) {
 	m, err := j.load()
 	if err != nil {
@@ -120,6 +157,7 @@ func (j *JSONStore) Get(userID int64) (UserState, bool) {
 	return state, ok
 }
 
+// Set сохраняет или обновляет состояние пользователя в JSON-файле.
 func (j *JSONStore) Set(userID int64, state UserState) error {
 	m, err := j.load()
 	if err != nil {
@@ -129,6 +167,7 @@ func (j *JSONStore) Set(userID int64, state UserState) error {
 	return j.save(m)
 }
 
+// Delete удаляет состояние пользователя из JSON-файла по его ID.
 func (j *JSONStore) Delete(userID int64) error {
 	m, err := j.load()
 	if err != nil {
@@ -138,7 +177,13 @@ func (j *JSONStore) Delete(userID int64) error {
 	return j.save(m)
 }
 
-// NewStore возвращает реализацию Store в зависимости от типа хранения.
+// LoadAllStates загружает и возвращает все состояния пользователей из JSON-файла.
+func (j *JSONStore) LoadAllStates() (map[int64]UserState, error) {
+	return j.load()
+}
+
+// NewStore возвращает реализацию интерфейса Store в зависимости от указанного типа хранения.
+// Если storageType равен "json", возвращается JSONStore, иначе используется in‑memory реализация (MemoryStore).
 func NewStore(storageType, filename string) Store {
 	if storageType == "json" {
 		return NewJSONStore(filename)

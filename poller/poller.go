@@ -1,34 +1,50 @@
+/*
+MIT License
+
+Copyright (c) 2025 Первый Бит
+
+Данная лицензия разрешает использование, копирование, изменение, слияние, публикацию, распространение,
+лицензирование и/или продажу копий программного обеспечения при соблюдении следующих условий:
+
+В вышеуказанном уведомлении об авторских правах и данном уведомлении о разрешении должны быть включены все копии
+или значимые части программного обеспечения.
+
+ПРОГРАММНОЕ ОБЕСПЕЧЕНИЕ ПРЕДОСТАВЛЯЕТСЯ "КАК ЕСТЬ", БЕЗ ГАРАНТИЙ ЛЮБОГО РОДА, ЯВНЫХ ИЛИ ПОДРАЗУМЕВАЕМЫХ,
+ВКЛЮЧАЯ, НО НЕ ОГРАНИЧИВАЯСЬ, ГАРАНТИЯМИ КОММЕРЧЕСКОЙ ПРИГОДНОСТИ, СООТВЕТСТВИЯ ДЛЯ ОПРЕДЕЛЕННОЙ ЦЕЛИ И
+НЕНАРУШЕНИЯ ПРАВ. НИ В КОЕМ СЛУЧАЕ АВТОРЫ ИЛИ ПРАВООБЛАДАТЕЛИ НЕ НЕСУТ ОТВЕТСТВЕННОСТИ ПО ИСКАМ,
+УСЛОВИЯМ, ДАМГЕ или другим обязательствам, возникающим из, или в связи с использованием, или иным образом
+связанным с данным программным обеспечением.
+*/
+
 package poller
 
 import (
-	"log"
-	"net/http"
-
 	"github.com/IT-Nick/config"
 	"gopkg.in/telebot.v3"
+	"log"
 )
 
-// NewPoller создаёт Poller в зависимости от режима.
+// NewPoller создаёт и возвращает экземпляр telebot.Poller в зависимости от выбранного режима работы бота.
+// Если режим "webhook", функция проверяет наличие публичного URL для вебхуков и создаёт Poller для вебхуков.
+// Если режим не "webhook", возвращается LongPoller с заданным интервалом polling.
+//
+// Параметры:
+//   - cfg: указатель на структуру конфигурации, содержащую настройки режима, URL вебхука, адрес прослушивания и интервал polling.
+//
+// Если режим работы равен "webhook", но переменная WEBHOOK_URL не задана, функция завершает работу с фатальной ошибкой.
 func NewPoller(cfg *config.Config) telebot.Poller {
 	if cfg.Mode == "webhook" {
 		if cfg.WebhookURL == "" {
 			log.Fatalf("В режиме webhook переменная WEBHOOK_URL должна быть задана")
 		}
+		// Создаём Poller для работы в режиме webhook.
 		return &telebot.Webhook{
-			Listen: cfg.ListenAddr,
+			Listen: cfg.ListenAddr, // Адрес и порт для прослушивания входящих запросов от Telegram.
 			Endpoint: &telebot.WebhookEndpoint{
-				PublicURL: cfg.WebhookURL,
+				PublicURL: cfg.WebhookURL, // Публичный URL, по которому Telegram отправляет обновления.
 			},
 		}
 	}
+	// Если режим работы не webhook, возвращаем LongPoller с указанным интервалом polling.
 	return &telebot.LongPoller{Timeout: cfg.PollInterval}
-}
-
-// StartHTTPServer запускает HTTP-сервер для вебхуков.
-func StartHTTPServer(cfg *config.Config, handler http.Handler) error {
-	server := &http.Server{
-		Addr:    cfg.ListenAddr,
-		Handler: handler,
-	}
-	return server.ListenAndServe()
 }
