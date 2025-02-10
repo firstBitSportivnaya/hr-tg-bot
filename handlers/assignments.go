@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"fmt"
-	"github.com/IT-Nick/pending"
 	"github.com/IT-Nick/testtypes"
 	"gopkg.in/telebot.v3"
 	"strings"
@@ -59,7 +58,6 @@ func assignHandler() telebot.HandlerFunc {
 //   - Отправляется уведомление о выбранном типе.
 func selectTestTypeHandler(bot *telebot.Bot) telebot.HandlerFunc {
 	return func(c telebot.Context) error {
-		// Получаем данные callback'а, например "select_type_logic" или "select_type_math"
 		data := c.Callback().Data
 		parts := strings.Split(data, "_")
 		if len(parts) < 3 {
@@ -67,36 +65,25 @@ func selectTestTypeHandler(bot *telebot.Bot) telebot.HandlerFunc {
 		}
 		selectedType := parts[2]
 
-		// Создаем или обновляем запись назначения теста с выбранным типом.
-		assignment := pending.TestAssignment{
-			AssignedByID: c.Sender().ID,
-			AssignedBy:   c.Sender().Username,
-			TestType:     selectedType,
-		}
-		if err := testAssignStore.Set(c.Sender().Username, assignment); err != nil {
-			return err
-		}
-
-		// Обновляем состояние отправителя – теперь ожидается ввод @username кандидата.
+		// Не создаём pending‑запись сразу,
+		// а сохраняем выбранный тип теста в состоянии отправителя.
 		senderState, ok := store.Get(c.Sender().ID)
 		if !ok {
 			return c.Send("Ошибка состояния пользователя.")
 		}
+		senderState.TestType = selectedType
 		senderState.State = "assign_test_waiting"
 		if err := store.Set(c.Sender().ID, senderState); err != nil {
 			return err
 		}
 
-		// Удаляем сообщение с кнопками выбора типа теста, чтобы оно не оставалось в чате.
+		// Удаляем сообщение с кнопками, чтобы оно не оставалось в чате.
 		if err := c.Delete(); err != nil {
-			// Если не удалось удалить, можно залогировать ошибку, но обработку продолжаем.
 			fmt.Printf("Ошибка удаления сообщения: %v\n", err)
 		}
 
-		// Отправляем сообщение с инструкцией по вводу @username кандидата.
 		notifyText := fmt.Sprintf("Выбран тип теста: '%s'. Теперь введите @username кандидата для назначения теста.", selectedType)
 		bot.Send(c.Sender(), notifyText)
-
 		return c.Respond()
 	}
 }

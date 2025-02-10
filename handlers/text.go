@@ -28,42 +28,37 @@ func textHandler(bot *telebot.Bot) telebot.HandlerFunc {
 
 		// Состояние "assign_test_waiting" означает, что система ожидает ввода @username кандидата для назначения теста.
 		case "assign_test_waiting":
-			// Получаем текст сообщения, введённый пользователем.
 			candidateText := c.Text()
-			// Обрезаем пробельные символы по краям.
 			candidateUsername := strings.TrimSpace(candidateText)
-			// Если введённый текст не начинается с "@", добавляем его.
 			if !strings.HasPrefix(candidateUsername, "@") {
 				candidateUsername = "@" + candidateUsername
 			}
-			// Удаляем "@" для унификации хранения имени кандидата.
+			// Для унификации удаляем "@".
 			candidateUsername = strings.TrimPrefix(candidateUsername, "@")
 
-			// Проверяем, существует ли уже назначение теста для данного кандидата.
+			// Проверяем, существует ли уже назначение для этого кандидата.
 			if _, exists, err := testAssignStore.Get(candidateUsername); err != nil {
-				// В случае ошибки отправляем сообщение об ошибке проверки.
 				c.Send("Ошибка при проверке назначения теста.")
 			} else if exists {
-				// Если тест уже назначен, уведомляем пользователя.
 				c.Send(fmt.Sprintf("Кандидату @%s уже назначен тест.", candidateUsername))
 			} else {
-				// Если назначение отсутствует, формируем новую запись для назначения теста.
+				// Используем выбранный тип теста, который сохранился в состоянии HR.
 				newAssignment := pending.TestAssignment{
-					CandidateID:       0, // ID кандидата будет назначен позже при запуске теста.
+					CandidateID:       0, // Будет заполнен, когда кандидат запустит тест.
 					CandidateUsername: candidateUsername,
 					AssignedByID:      user.ID,
 					AssignedBy:        user.Username,
 					AssignedAt:        time.Now(),
+					TestType:          us.TestType,
 				}
-				// Сохраняем новое назначение в хранилище.
 				if err := testAssignStore.Set(candidateUsername, newAssignment); err != nil {
 					c.Send("Ошибка при назначении теста.")
 				} else {
-					// Если всё прошло успешно, отправляем подтверждение.
 					c.Send(fmt.Sprintf("Тест успешно назначен кандидату @%s", candidateUsername))
 				}
 			}
-			// Возвращаем состояние пользователя в "welcome" после обработки.
+
+			// После назначения переводим состояние HR в "welcome".
 			us.State = "welcome"
 			store.Set(user.ID, us)
 			return nil

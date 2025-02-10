@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"fmt"
+	"github.com/IT-Nick/testtypes"
 	"log"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/IT-Nick/database"
 	"github.com/IT-Nick/helpers"
@@ -19,35 +21,24 @@ import (
 // вопросов и запускает таймер, после чего отправляет первый вопрос кандидату.
 func startTestHandler(bot *telebot.Bot) telebot.HandlerFunc {
 	return func(c telebot.Context) error {
-		// Получаем информацию о пользователе, который запускает тест.
 		user := c.Sender()
 		candidateUsername := user.Username
 
-		// Проверяем наличие отложенного назначения теста для данного кандидата.
 		assignment, exists, err := testAssignStore.Get(candidateUsername)
 		if err != nil || !exists {
-			// Если тест не назначен, уведомляем кандидата об отсутствии назначения.
 			return c.Send("Ваш HR менеджер еще не назначил вам тест.")
 		}
-		// Привязываем назначение к текущему пользователю.
 		assignment.CandidateID = user.ID
-
-		// Обновляем запись назначения теста (если требуется) и затем удаляем её,
-		// так как тест фактически начинается.
 		if err := testAssignStore.Set(candidateUsername, assignment); err != nil {
 			return err
 		}
 		_ = testAssignStore.Delete(candidateUsername)
 
-		// Извлекаем текущее состояние пользователя из хранилища.
 		us, stateExists := store.Get(user.ID)
-		// По умолчанию роль пользователя — "user".
 		role := "user"
-		// Если состояние существует и роль пользователя равна "admin" или "hr", используем её.
 		if stateExists && (us.Role == "admin" || us.Role == "hr") {
 			role = us.Role
 		} else {
-			// Если пользователь является администратором согласно конфигурации, назначаем ему роль "admin".
 			for _, id := range cfg.AdminIDs {
 				if user.ID == id {
 					role = "admin"
@@ -56,14 +47,21 @@ func startTestHandler(bot *telebot.Bot) telebot.HandlerFunc {
 			}
 		}
 
-		// Получаем набор вопросов для кандидата с учетом выбранного типа теста.
-		// cfg.TestQuestions – общее число вопросов для теста, а assignment.TestType содержит выбранный тип (например, "logic").
-		taskSet, err := taskManager.GetRandomTasks(cfg.TestQuestions, strconv.FormatInt(user.ID, 10), assignment.TestType)
+		ttSettings, err := testtypes.GetTestTypeSettings(assignment.TestType)
+		if err != nil {
+			ttSettings = &testtypes.TestType{
+				TestQuestions: cfg.TestQuestions,
+				TestDuration:  int(cfg.TestDuration.Minutes()),
+			}
+		}
+		testQuestions := ttSettings.TestQuestions
+		testDuration := time.Duration(ttSettings.TestDuration) * time.Minute
+
+		taskSet, err := taskManager.GetRandomTasks(testQuestions, strconv.FormatInt(user.ID, 10), assignment.TestType)
 		if err != nil {
 			return err
 		}
 
-		// Инициализируем новое состояние пользователя для начала тестирования.
 		newState := database.UserState{
 			Role:              role,
 			State:             "testing",
@@ -76,19 +74,17 @@ func startTestHandler(bot *telebot.Bot) telebot.HandlerFunc {
 			AssignedByID:      assignment.AssignedByID,
 			AssignedBy:        assignment.AssignedBy,
 			TestType:          assignment.TestType,
+			TestQuestions:     testQuestions,
+			TestDuration:      testDuration,
 		}
-		// Сохраняем новое состояние пользователя.
 		if err := store.Set(user.ID, newState); err != nil {
 			return err
 		}
 
-		// Если запуск теста инициирован через callback (нажатие inline-кнопки),
-		// удаляем исходное сообщение для уменьшения засорения чата.
 		if c.Callback() != nil {
 			_ = c.Delete()
 		}
 
-		// Запускаем таймер теста, который периодически обновляет сообщение с оставшимся временем и информацией о прогрессе.
 		helpers.StartTimerMessage(bot, user, cfg, func() string {
 			st, ok := store.Get(user.ID)
 			if !ok {
@@ -99,15 +95,12 @@ func startTestHandler(bot *telebot.Bot) telebot.HandlerFunc {
 				st.CurrentQuestion+1,
 				len(st.TestTasks))
 		}, func() {
-			// По истечении времени таймера вызывается завершение теста.
 			if err := FinishTest(bot, user); err != nil {
 				fmt.Fprintf(os.Stderr, "Ошибка завершения теста userID=%d: %v\n", user.ID, err)
 			}
 		})
 
-		// Отправляем первый вопрос кандидату.
 		if err := sendQuestion(bot, user, newState.CurrentQuestion); err != nil {
-			log.Printf("Ошибка отправки вопроса: %v", err)
 			return err
 		}
 		return nil

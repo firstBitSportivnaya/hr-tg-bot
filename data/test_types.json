@@ -1,10 +1,14 @@
 [
   {
     "type": "logic",
-    "description": "Логические задачи"
+    "description": "Логические задачи",
+    "test_questions": 2,
+    "test_duration": 15
   },
   {
     "type": "math",
-    "description": "Математические задачи"
+    "description": "Математические задачи",
+    "test_questions": 3,
+    "test_duration": 25
   }
 ]

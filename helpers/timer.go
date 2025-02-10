@@ -33,24 +33,25 @@ func StartTimerMessage(
 	getTimerText func() string,
 	onTimeout func(),
 ) {
-	// Если для данного пользователя уже существует активный таймер, отменяем его.
 	if cancel, ok := TimerMessageManager[user.ID]; ok {
 		cancel()
 	}
 
-	// Получаем текущее состояние пользователя из глобального хранилища.
 	us, ok := database.GlobalStore.Get(user.ID)
 	if !ok {
 		return
 	}
 
-	// Если дедлайн таймера не установлен или уже прошёл, устанавливаем новый дедлайн.
+	testDuration := cfg.TestDuration
+	if us.TestDuration > 0 {
+		testDuration = us.TestDuration
+	}
+
 	if us.TimerDeadline.IsZero() || time.Now().After(us.TimerDeadline) {
-		us.TimerDeadline = time.Now().Add(cfg.TestDuration)
+		us.TimerDeadline = time.Now().Add(testDuration)
 		_ = database.GlobalStore.Set(user.ID, us)
 	}
 
-	// Отправляем первое сообщение таймера с исходным текстом.
 	initialText := getTimerText()
 	timerMsg, err := bot.Send(user, initialText)
 	if err != nil {
@@ -58,48 +59,34 @@ func StartTimerMessage(
 		return
 	}
 
-	// Сохраняем ID сообщения таймера в состоянии пользователя.
 	us.TimerMessageID = timerMsg.ID
 	_ = database.GlobalStore.Set(user.ID, us)
 
-	// Создаем контекст с возможностью отмены, чтобы управлять жизненным циклом таймера.
 	ctx, cancel := context.WithCancel(context.Background())
 	TimerMessageManager[user.ID] = cancel
 
-	// Запускаем горутину для периодического обновления сообщения таймера.
 	go func() {
-		// По завершении горутины удаляем запись о таймере.
 		defer delete(TimerMessageManager, user.ID)
 		msg := timerMsg
 		for {
 			select {
-			// Если контекст отменен, выходим из горутины.
 			case <-ctx.Done():
 				return
 			default:
-				// Получаем новый текст для таймера.
 				newText := getTimerText()
-				// Пытаемся отредактировать сообщение с таймером.
 				_, err := bot.Edit(msg, newText)
-				if err != nil {
-					// Если ошибка не связана с отсутствием изменений, выводим сообщение об ошибке.
-					if !containsNotModifiedError(err.Error()) {
-						fmt.Fprintf(os.Stderr, "Ошибка редактирования сообщения таймера для userID=%d: %v\n", user.ID, err)
-					}
+				if err != nil && !containsNotModifiedError(err.Error()) {
+					fmt.Fprintf(os.Stderr, "Ошибка редактирования сообщения таймера для userID=%d: %v\n", user.ID, err)
 				}
-
-				// Обновляем состояние пользователя и вычисляем оставшееся время.
 				us, ok := database.GlobalStore.Get(user.ID)
 				if !ok {
 					return
 				}
 				remaining := us.TimerDeadline.Sub(time.Now())
-				// Если время истекло, вызываем onTimeout и выходим.
 				if remaining <= 0 {
 					onTimeout()
 					return
 				}
-				// Ждем одну секунду перед следующим обновлением.
 				time.Sleep(time.Second)
 			}
 		}

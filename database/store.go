@@ -17,17 +17,19 @@ var GlobalStore Store
 // UserState описывает состояние пользователя в системе.
 // Содержит информацию о роли, состоянии тестирования, текущем прогрессе, а также данные, необходимые для работы таймера.
 type UserState struct {
-	Role              string       `json:"role"`                // Роль пользователя (например, "user", "hr", "admin")
-	State             string       `json:"state"`               // Текущее состояние (например, "welcome", "testing", "finished")
-	CurrentQuestion   int          `json:"current_question"`    // Индекс текущего вопроса теста
-	Score             int          `json:"score"`               // Количество правильных ответов
-	TestTasks         []tasks.Task `json:"test_tasks"`          // Список тестовых вопросов, назначенных пользователю
-	Answers           map[int]int  `json:"answers"`             // Карта, где ключ – индекс вопроса, значение – выбранный вариант ответа
-	TelegramUsername  string       `json:"telegram_username"`   // Telegram-username пользователя
-	TelegramFirstName string       `json:"telegram_first_name"` // Имя пользователя в Telegram
-	AssignedBy        string       `json:"assigned_by"`         // Имя пользователя, назначившего тест
-	AssignedByID      int64        `json:"assigned_by_id"`      // ID пользователя, назначившего тест
-	TestType          string       `json:"test_type"`           // Вид теста
+	Role              string        `json:"role"`                // Роль пользователя (например, "user", "hr", "admin")
+	State             string        `json:"state"`               // Текущее состояние (например, "welcome", "testing", "finished")
+	CurrentQuestion   int           `json:"current_question"`    // Индекс текущего вопроса теста
+	Score             int           `json:"score"`               // Количество правильных ответов
+	TestTasks         []tasks.Task  `json:"test_tasks"`          // Список тестовых вопросов, назначенных пользователю
+	Answers           map[int]int   `json:"answers"`             // Карта, где ключ – индекс вопроса, значение – выбранный вариант ответа
+	TelegramUsername  string        `json:"telegram_username"`   // Telegram-username пользователя
+	TelegramFirstName string        `json:"telegram_first_name"` // Имя пользователя в Telegram
+	AssignedBy        string        `json:"assigned_by"`         // Имя пользователя, назначившего тест
+	AssignedByID      int64         `json:"assigned_by_id"`      // ID пользователя, назначившего тест
+	TestType          string        `json:"test_type"`           // Вид теста
+	TestQuestions     int           `json:"test_questions"`
+	TestDuration      time.Duration `json:"test_duration"`
 	// Поля для работы с таймером теста.
 	TimerMessageID    int       `json:"timer_message_id"`    // ID сообщения, содержащего таймер
 	TimerDeadline     time.Time `json:"timer_deadline"`      // Время, до которого пользователь должен завершить тест
