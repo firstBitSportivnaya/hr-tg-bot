@@ -1,0 +1,10 @@
+[
+  {
+    "type": "logic",
+    "description": "Логические задачи"
+  },
+  {
+    "type": "math",
+    "description": "Математические задачи"
+  }
+]

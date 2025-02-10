@@ -83,5 +83,7 @@ func RegisterHandlers(bot *telebot.Bot, s database.Store) {
 	// - assignHandler: используется для назначения теста кандидату пользователем с ролью HR или admin.
 	// - assignHRHandler: используется для назначения роли HR кандидату, инициируется администратором.
 	bot.Handle(&telebot.InlineButton{Unique: "assign_test"}, assignHandler())
+	bot.Handle(&telebot.InlineButton{Unique: "select_test_type"}, selectTestTypeHandler(bot))
+
 	bot.Handle(&telebot.InlineButton{Unique: "assign_hr"}, assignHRHandler())
 }

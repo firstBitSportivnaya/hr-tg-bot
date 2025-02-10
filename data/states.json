@@ -1,1 +1,31 @@
-{}
+{
+  "373389894": {
+    "role": "admin",
+    "state": "finished",
+    "current_question": 1,
+    "score": 0,
+    "test_tasks": [
+      {
+        "id": 4,
+        "text": "просто вопрос не на логику 4: Все A – B. Все B – C. Следует ли, что все A – C?",
+        "options": [
+          "Да",
+          "Нет",
+          "Не уверен"
+        ],
+        "answer": 0,
+        "type": "math"
+      }
+    ],
+    "answers": {
+      "0": 1
+    },
+    "telegram_username": "stepplex",
+    "telegram_first_name": "Степан",
+    "assigned_by": "stepplex",
+    "assigned_by_id": 373389894,
+    "timer_message_id": 0,
+    "timer_deadline": "0001-01-01T00:00:00Z",
+    "question_message_id": 5237
+  }
+}

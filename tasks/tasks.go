@@ -35,6 +35,7 @@ type Task struct {
 	Text       string   `json:"text"`    // Текст вопроса.
 	Options    []string `json:"options"` // Список вариантов ответов.
 	Answer     int      `json:"answer"`  // Индекс правильного ответа в срезе Options.
+	Type       string   `json:"type"`    // Тип вопроса (например, "logic", "math" и т.д.)
 	ReservedBy string   `json:"-"`       // Идентификатор кандидата, зарезервировавшего вопрос (не сериализуется в JSON).
 }
 
@@ -66,15 +67,19 @@ func NewManager(filename string) (*Manager, error) {
 //
 // В зависимости от количества свободных вопросов, выбирается случайный набор вопросов, и если вопрос не зарезервирован,
 // он резервируется за кандидатом.
-func (m *Manager) GetRandomTasks(n int, candidateID string) ([]Task, error) {
+func (m *Manager) GetRandomTasks(n int, candidateID, testType string) ([]Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var free []int     // Индексы вопросов, которые не зарезервированы.
-	var reserved []int // Индексы вопросов, зарезервированных для других кандидатов.
+	var free []int     // Индексы свободных вопросов.
+	var reserved []int // Индексы зарезервированных вопросов.
 
-	// Разделяем вопросы на свободные и зарезервированные.
+	// Проходим по всем вопросам и отбираем только те, у которых совпадает тип (если testType задан).
 	for i, t := range m.tasks {
+		// Если задан тип и он не совпадает – пропускаем вопрос.
+		if testType != "" && t.Type != testType {
+			continue
+		}
 		if t.ReservedBy == "" {
 			free = append(free, i)
 		} else if t.ReservedBy != candidateID {
@@ -85,23 +90,19 @@ func (m *Manager) GetRandomTasks(n int, candidateID string) ([]Task, error) {
 	var selected []int
 	rand.Seed(time.Now().UnixNano())
 	if len(free) >= n {
-		// Если свободных вопросов достаточно, выбираем случайные n индексов.
 		selected = randomIndices(free, n)
 	} else {
-		// Если свободных вопросов недостаточно, выбираем все свободные и добавляем случайные из зарезервированных.
 		selected = append(selected, free...)
 		remaining := n - len(free)
 		if len(reserved) >= remaining {
 			additional := randomIndices(reserved, remaining)
 			selected = append(selected, additional...)
 		} else {
-			// Если и зарезервированных недостаточно, добавляем их все.
 			selected = append(selected, reserved...)
 		}
 	}
 
 	var result []Task
-	// Резервируем выбранные вопросы за кандидатом, если они ещё не были зарезервированы.
 	for _, idx := range selected {
 		task := m.tasks[idx]
 		if task.ReservedBy == "" {

@@ -35,6 +35,8 @@ type TestAssignment struct {
 	AssignedByID      int64     `json:"assigned_by_id"`     // ID пользователя, назначившего тест.
 	AssignedBy        string    `json:"assigned_by"`        // Имя пользователя, назначившего тест.
 	AssignedAt        time.Time `json:"assigned_at"`        // Время, когда тест был назначен.
+	TestType          string    `json:"test_type"`          // Тип теста
+
 }
 
 // TestAssignmentStore представляет хранилище для отложенных назначений теста.

@@ -37,7 +37,7 @@ import (
 // вопросов и запускает таймер, после чего отправляет первый вопрос кандидату.
 func startTestHandler(bot *telebot.Bot) telebot.HandlerFunc {
 	return func(c telebot.Context) error {
-		// Получаем информацию о пользователе, который инициировал запуск теста.
+		// Получаем информацию о пользователе, который запускает тест.
 		user := c.Sender()
 		candidateUsername := user.Username
 
@@ -47,7 +47,7 @@ func startTestHandler(bot *telebot.Bot) telebot.HandlerFunc {
 			// Если тест не назначен, уведомляем кандидата об отсутствии назначения.
 			return c.Send("Ваш HR менеджер еще не назначил вам тест.")
 		}
-		// Связываем назначение с текущим пользователем, устанавливая его ID.
+		// Привязываем назначение к текущему пользователю.
 		assignment.CandidateID = user.ID
 
 		// Обновляем запись назначения теста (если требуется) и затем удаляем её,
@@ -74,8 +74,9 @@ func startTestHandler(bot *telebot.Bot) telebot.HandlerFunc {
 			}
 		}
 
-		// Получаем случайный набор тестовых вопросов для кандидата.
-		taskSet, err := taskManager.GetRandomTasks(cfg.TestQuestions, strconv.FormatInt(user.ID, 10))
+		// Получаем набор вопросов для кандидата с учетом выбранного типа теста.
+		// cfg.TestQuestions – общее число вопросов для теста, а assignment.TestType содержит выбранный тип (например, "logic").
+		taskSet, err := taskManager.GetRandomTasks(cfg.TestQuestions, strconv.FormatInt(user.ID, 10), assignment.TestType)
 		if err != nil {
 			return err
 		}
@@ -90,7 +91,7 @@ func startTestHandler(bot *telebot.Bot) telebot.HandlerFunc {
 			Answers:           make(map[int]int),
 			TelegramFirstName: user.FirstName,
 			TelegramUsername:  user.Username,
-			// Сохраняем информацию о назначении теста для последующего формирования отчёта.
+			// Сохраняем информацию о назначении теста для формирования отчёта.
 			AssignedByID: assignment.AssignedByID,
 			AssignedBy:   assignment.AssignedBy,
 		}
@@ -105,13 +106,12 @@ func startTestHandler(bot *telebot.Bot) telebot.HandlerFunc {
 			_ = c.Delete()
 		}
 
-		// Запускаем таймер теста, который периодически обновляет сообщение с оставшимся временем и информацией о текущем вопросе.
+		// Запускаем таймер теста, который периодически обновляет сообщение с оставшимся временем и информацией о прогрессе.
 		helpers.StartTimerMessage(bot, user, cfg, func() string {
 			st, ok := store.Get(user.ID)
 			if !ok {
 				return ""
 			}
-			// Форматируем сообщение с информацией о времени и текущем прогрессе теста.
 			return fmt.Sprintf("Время: %s\nВопрос %d из %d",
 				helpers.RemainingTimeStr(st.TimerDeadline),
 				st.CurrentQuestion+1,

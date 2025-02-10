@@ -19,7 +19,11 @@ Copyright (c) 2025 Первый Бит
 package handlers
 
 import (
+	"fmt"
+	"github.com/IT-Nick/pending"
+	"github.com/IT-Nick/testtypes"
 	"gopkg.in/telebot.v3"
+	"strings"
 )
 
 // assignHandler обрабатывает назначение теста кандидату.
@@ -27,27 +31,91 @@ import (
 // после чего ему отправляется сообщение с просьбой ввести @username кандидата для назначения теста.
 func assignHandler() telebot.HandlerFunc {
 	return func(c telebot.Context) error {
-		// Получаем информацию об отправителе (пользователе, инициировавшем действие).
 		sender := c.Sender()
-		// Извлекаем текущее состояние пользователя из глобального хранилища.
 		senderState, ok := store.Get(sender.ID)
-		// Если состояние не найдено или роль пользователя не позволяет назначать тест (допустимы только "hr" и "admin"),
-		// отправляем уведомление об отсутствии прав.
 		if !ok || (senderState.Role != "hr" && senderState.Role != "admin") {
 			return c.Send("У вас нет прав для назначения теста.")
 		}
-		// Если обновление является callback-запросом (например, при нажатии inline-кнопки),
-		// переводим состояние пользователя в режим ожидания ввода @username кандидата.
+
+		// Если это callback, то загружаем типы тестов и выводим их в виде inline-кнопок.
 		if c.Callback() != nil {
-			senderState.State = "assign_test_waiting"
-			// Сохраняем обновленное состояние в хранилище.
+			testTypes, err := testtypes.LoadTestTypes("data/test_types.json")
+			if err != nil {
+				return c.Send("Ошибка загрузки типов тестов.")
+			}
+			rm := &telebot.ReplyMarkup{}
+			var buttons []telebot.InlineButton
+			for _, tt := range testTypes {
+				data := fmt.Sprintf("select_type_%s", tt.Type)
+				btn := telebot.InlineButton{
+					Text:   tt.Description,
+					Unique: "select_test_type",
+					Data:   data,
+				}
+				buttons = append(buttons, btn)
+			}
+			// Например, выводим кнопки в одну строку
+			rm.InlineKeyboard = [][]telebot.InlineButton{buttons}
+
+			// Обновляем состояние отправителя (например, "assign_test_select_type")
+			senderState.State = "assign_test_select_type"
 			if err := store.Set(sender.ID, senderState); err != nil {
 				return err
 			}
-			// Отправляем сообщение с инструкцией по вводу @username кандидата.
-			return c.Send("Пожалуйста, введите @username кандидата для назначения теста.")
+			return c.Send("Выберите тип теста:", rm)
 		}
 		return nil
+	}
+}
+
+// selectTestTypeHandler обрабатывает выбор типа теста HR/admin'ом.
+// После нажатия на кнопку с типом теста:
+//   - Извлекается выбранный тип,
+//   - Обновляется pending-запись назначения теста,
+//   - Изменяется состояние отправителя (теперь ожидается ввод @username кандидата),
+//   - Исходное сообщение с кнопками удаляется из чата,
+//   - Отправляется уведомление о выбранном типе.
+func selectTestTypeHandler(bot *telebot.Bot) telebot.HandlerFunc {
+	return func(c telebot.Context) error {
+		// Получаем данные callback'а, например "select_type_logic" или "select_type_math"
+		data := c.Callback().Data
+		parts := strings.Split(data, "_")
+		if len(parts) < 3 {
+			return c.Send("Неверные данные выбора типа теста.")
+		}
+		selectedType := parts[2]
+
+		// Создаем или обновляем запись назначения теста с выбранным типом.
+		assignment := pending.TestAssignment{
+			AssignedByID: c.Sender().ID,
+			AssignedBy:   c.Sender().Username,
+			TestType:     selectedType,
+		}
+		if err := testAssignStore.Set(c.Sender().Username, assignment); err != nil {
+			return err
+		}
+
+		// Обновляем состояние отправителя – теперь ожидается ввод @username кандидата.
+		senderState, ok := store.Get(c.Sender().ID)
+		if !ok {
+			return c.Send("Ошибка состояния пользователя.")
+		}
+		senderState.State = "assign_test_waiting"
+		if err := store.Set(c.Sender().ID, senderState); err != nil {
+			return err
+		}
+
+		// Удаляем сообщение с кнопками выбора типа теста, чтобы оно не оставалось в чате.
+		if err := c.Delete(); err != nil {
+			// Если не удалось удалить, можно залогировать ошибку, но обработку продолжаем.
+			fmt.Printf("Ошибка удаления сообщения: %v\n", err)
+		}
+
+		// Отправляем сообщение с инструкцией по вводу @username кандидата.
+		notifyText := fmt.Sprintf("Выбран тип теста: '%s'. Теперь введите @username кандидата для назначения теста.", selectedType)
+		bot.Send(c.Sender(), notifyText)
+
+		return c.Respond()
 	}
 }
 
