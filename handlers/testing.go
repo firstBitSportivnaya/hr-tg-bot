@@ -1,21 +1,3 @@
-/*
-MIT License
-
-Copyright (c) 2025 Первый Бит
-
-Данная лицензия разрешает использование, копирование, изменение, слияние, публикацию, распространение,
-лицензирование и/или продажу копий программного обеспечения при соблюдении следующих условий:
-
-В вышеуказанном уведомлении об авторских правах и данном уведомлении о разрешении должны быть включены все копии
-или значимые части программного обеспечения.
-
-ПРОГРАММНОЕ ОБЕСПЕЧЕНИЕ ПРЕДОСТАВЛЯЕТСЯ "КАК ЕСТЬ", БЕЗ ГАРАНТИЙ ЛЮБОГО РОДА, ЯВНЫХ ИЛИ ПОДРАЗУМЕВАЕМЫХ,
-ВКЛЮЧАЯ, НО НЕ ОГРАНИЧИВАЯСЬ, ГАРАНТИЯМИ КОММЕРЧЕСКОЙ ПРИГОДНОСТИ, СООТВЕТСТВИЯ ДЛЯ ОПРЕДЕЛЕННОЙ ЦЕЛИ И
-НЕНАРУШЕНИЯ ПРАВ. НИ В КОЕМ СЛУЧАЕ АВТОРЫ ИЛИ ПРАВООБЛАДАТЕЛИ НЕ НЕСУТ ОТВЕТСТВЕННОСТИ ПО ИСКАМ,
-УСЛОВИЯМ, ДАМГЕ или другим обязательствам, возникающим из, или в связи с использованием, или иным образом
-связанным с данным программным обеспечением.
-*/
-
 package handlers
 
 import (
@@ -91,9 +73,9 @@ func startTestHandler(bot *telebot.Bot) telebot.HandlerFunc {
 			Answers:           make(map[int]int),
 			TelegramFirstName: user.FirstName,
 			TelegramUsername:  user.Username,
-			// Сохраняем информацию о назначении теста для формирования отчёта.
-			AssignedByID: assignment.AssignedByID,
-			AssignedBy:   assignment.AssignedBy,
+			AssignedByID:      assignment.AssignedByID,
+			AssignedBy:        assignment.AssignedBy,
+			TestType:          assignment.TestType,
 		}
 		// Сохраняем новое состояние пользователя.
 		if err := store.Set(user.ID, newState); err != nil {
@@ -279,6 +261,7 @@ func FinishTest(bot *telebot.Bot, user *telebot.User) error {
 		TotalQuestions:    len(us.TestTasks),
 		Answers:           us.Answers,
 		TestTasks:         us.TestTasks,
+		TestType:          us.TestType,
 	}
 	// Генерируем PDF-отчёт на основе полученных данных.
 	reportFile, err := report.GeneratePDFReport(reportData)
