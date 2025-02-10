@@ -86,4 +86,7 @@ func RegisterHandlers(bot *telebot.Bot, s database.Store) {
 	bot.Handle(&telebot.InlineButton{Unique: "select_test_type"}, selectTestTypeHandler(bot))
 
 	bot.Handle(&telebot.InlineButton{Unique: "assign_hr"}, assignHRHandler())
+
+	bot.Handle(&telebot.InlineButton{Unique: "assign_admin"}, assignAdminHandler())
+
 }

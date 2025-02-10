@@ -126,6 +126,38 @@ func textHandler(bot *telebot.Bot) telebot.HandlerFunc {
 			store.Set(user.ID, us)
 			return nil
 
+		case "assign_admin_waiting":
+			candidateText := c.Text()
+			candidateUsername := strings.TrimSpace(candidateText)
+			if !strings.HasPrefix(candidateUsername, "@") {
+				candidateUsername = "@" + candidateUsername
+			}
+			// Для унификации удаляем символ "@".
+			candidateUsername = strings.TrimPrefix(candidateUsername, "@")
+
+			// Проверяем, есть ли уже назначение для данного кандидата.
+			if existing, exists, err := roleAssignStore.Get(candidateUsername); err != nil {
+				c.Send("Ошибка при проверке назначения роли.")
+			} else if exists {
+				c.Send(fmt.Sprintf("Кандидату @%s уже назначена роль %s.", candidateUsername, existing.NewRole))
+			} else {
+				newRoleAssign := pending.RoleAssignment{
+					CandidateUsername: candidateUsername,
+					NewRole:           "admin",
+					AssignedBy:        user.Username,
+					AssignedAt:        time.Now(),
+				}
+				if err := roleAssignStore.Set(candidateUsername, newRoleAssign); err != nil {
+					c.Send("Ошибка при назначении роли администратора.")
+				} else {
+					c.Send(fmt.Sprintf("Роль администратора успешно назначена кандидату @%s", candidateUsername))
+				}
+			}
+			// Возвращаем состояние в "welcome".
+			us.State = "welcome"
+			store.Set(user.ID, us)
+			return nil
+
 		// Если состояние не соответствует ни одному из ожидаемых вариантов,
 		// отправляем сообщение с инструкцией для начала теста.
 		default:

@@ -147,3 +147,25 @@ func assignHRHandler() telebot.HandlerFunc {
 		return nil
 	}
 }
+
+// assignAdminHandler обрабатывает назначение роли администратора.
+// Если администратор нажимает inline‑кнопку, его состояние переводится в режим "assign_admin_waiting"
+// и ему отправляется сообщение с просьбой ввести @username кандидата для назначения администратора.
+func assignAdminHandler() telebot.HandlerFunc {
+	return func(c telebot.Context) error {
+		sender := c.Sender()
+		senderState, ok := store.Get(sender.ID)
+		if !ok || senderState.Role != "admin" {
+			return c.Send("У вас нет прав для назначения администратора.")
+		}
+		// Если это callback‑запрос, переводим состояние и просим ввести @username кандидата.
+		if c.Callback() != nil {
+			senderState.State = "assign_admin_waiting"
+			if err := store.Set(sender.ID, senderState); err != nil {
+				return err
+			}
+			return c.Send("Пожалуйста, введите @username кандидата для назначения администратора.")
+		}
+		return nil
+	}
+}

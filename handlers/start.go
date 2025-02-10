@@ -31,40 +31,24 @@ import (
 // с соответствующими inline-кнопками для дальнейших действий.
 func startHandler(bot *telebot.Bot) telebot.HandlerFunc {
 	return func(c telebot.Context) error {
-		// Получаем данные о пользователе, инициировавшем команду.
 		user := c.Sender()
-
-		// Попытка извлечь ранее сохраненное состояние пользователя из хранилища.
 		existingState, exists := store.Get(user.ID)
-
-		// По умолчанию роль пользователя - "user".
 		role := "user"
 		if exists {
-			// Если состояние существует, берем роль из сохраненного состояния.
 			role = existingState.Role
 		}
-
-		// Если пользователь содержится в списке администраторов из конфигурации, назначаем роль "admin".
 		for _, id := range cfg.AdminIDs {
 			if user.ID == id {
 				role = "admin"
 				break
 			}
 		}
-
-		// Если для пользователя имеется отложенное назначение роли (например, HR),
-		// обновляем роль на указанную в отложенном назначении и удаляем запись о назначении.
 		if roleAssign, ok, _ := roleAssignStore.Get(user.Username); ok {
 			role = roleAssign.NewRole
 			_ = roleAssignStore.Delete(user.Username)
 		}
 
-		// Устанавливаем начальное состояние пользователя.
-		// По умолчанию состояние - "welcome".
 		stateStr := "welcome"
-
-		// Если для пользователя имеется отложенное назначение теста (например, HR назначил тест кандидату),
-		// обновляем состояние на "assigned" и сохраняем дополнительные данные о назначении.
 		if testAssign, ok, _ := testAssignStore.Get(user.Username); ok {
 			stateStr = "assigned"
 			newState := database.UserState{
@@ -78,7 +62,6 @@ func startHandler(bot *telebot.Bot) telebot.HandlerFunc {
 				return err
 			}
 		} else {
-			// Если нет отложенного назначения теста, сохраняем стандартное состояние.
 			if err := store.Set(user.ID, database.UserState{
 				Role:              role,
 				State:             stateStr,
@@ -89,25 +72,18 @@ func startHandler(bot *telebot.Bot) telebot.HandlerFunc {
 			}
 		}
 
-		// Формирование приветственного сообщения с динамическими данными:
-		// количество вопросов в тесте и продолжительность теста.
 		welcome := fmt.Sprintf(messages.WelcomeFmt, cfg.TestQuestions, int(cfg.TestDuration.Minutes()))
-
-		// Создаем объект разметки для inline-кнопок.
 		rm := &telebot.ReplyMarkup{}
-		// Создаем кнопку для начала теста.
 		startTestBtn := telebot.InlineButton{
 			Text:   messages.StartTestButton,
 			Unique: "start_test",
 			Data:   "start",
 		}
 
-		// Инициализируем клавиатуру с первой строкой, содержащей кнопку "Начать тест".
 		rows := [][]telebot.InlineButton{
 			{startTestBtn},
 		}
 
-		// Если роль пользователя "hr", добавляем кнопку для назначения теста кандидату.
 		if role == "hr" {
 			assignTestBtn := telebot.InlineButton{
 				Text:   "Назначить тест кандидату",
@@ -116,8 +92,6 @@ func startHandler(bot *telebot.Bot) telebot.HandlerFunc {
 			}
 			rows = append(rows, []telebot.InlineButton{assignTestBtn})
 		} else if role == "admin" {
-			// Если роль пользователя "admin", добавляем две кнопки:
-			// одну для назначения теста, другую для назначения роли HR.
 			assignTestBtn := telebot.InlineButton{
 				Text:   "Назначить тест кандидату",
 				Unique: "assign_test",
@@ -128,12 +102,14 @@ func startHandler(bot *telebot.Bot) telebot.HandlerFunc {
 				Unique: "assign_hr",
 				Data:   "assign_hr",
 			}
-			rows = append(rows, []telebot.InlineButton{assignTestBtn, assignHRBtn})
+			assignAdminBtn := telebot.InlineButton{
+				Text:   "Назначить администратора",
+				Unique: "assign_admin",
+				Data:   "assign_admin",
+			}
+			rows = append(rows, []telebot.InlineButton{assignTestBtn, assignHRBtn, assignAdminBtn})
 		}
-		// Устанавливаем сформированную клавиатуру в объект ReplyMarkup.
 		rm.InlineKeyboard = rows
-
-		// Отправляем пользователю приветственное сообщение с inline-кнопками.
 		_, err := bot.Send(user, welcome, rm)
 		return err
 	}
