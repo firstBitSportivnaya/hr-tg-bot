@@ -1,11 +1,11 @@
 package handlers
 
 import (
+	"github.com/IT-Nick/database/json"
 	"log"
 
 	"github.com/IT-Nick/config"
 	"github.com/IT-Nick/database"
-	"github.com/IT-Nick/pending"
 	"github.com/IT-Nick/tasks"
 	"gopkg.in/telebot.v3"
 )
@@ -13,11 +13,11 @@ import (
 // Глобальные переменные для хранения зависимостей, используемых обработчиками бота.
 // Эти переменные инициализируются при вызове RegisterHandlers и используются для доступа к общим ресурсам.
 var (
-	cfg             *config.Config               // Глобальная конфигурация приложения.
-	store           database.Store               // Хранилище состояний пользователей.
-	taskManager     *tasks.Manager               // Менеджер тестовых вопросов, используется для получения случайного набора вопросов.
-	testAssignStore *pending.TestAssignmentStore // Хранилище для отложенных назначений теста кандидатам.
-	roleAssignStore *pending.RoleAssignmentStore // Хранилище для отложенных назначений ролей (например, HR).
+	cfg             *config.Config            // Глобальная конфигурация приложения.
+	store           database.Store            // Хранилище состояний пользователей.
+	taskManager     *tasks.Manager            // Менеджер тестовых вопросов, используется для получения случайного набора вопросов.
+	testAssignStore *json.TestAssignmentStore // Хранилище для отложенных назначений теста кандидатам.
+	roleAssignStore *json.RoleAssignmentStore // Хранилище для отложенных назначений ролей (например, HR).
 )
 
 // RegisterHandlers инициализирует зависимости и регистрирует обработчики команд и callback'ов для Telegram-бота.
@@ -41,8 +41,8 @@ func RegisterHandlers(bot *telebot.Bot, s database.Store) {
 	}
 
 	// Инициализируем хранилища для отложенных назначений теста и ролей.
-	testAssignStore = pending.NewTestAssignmentStore("data/test_assignments.json")
-	roleAssignStore = pending.NewRoleAssignmentStore("data/role_assignments.json")
+	testAssignStore = json.NewTestAssignmentStore("data/test_assignments.json")
+	roleAssignStore = json.NewRoleAssignmentStore("data/role_assignments.json")
 
 	// Регистрируем обработчик команды /start.
 	// Этот обработчик отвечает за приветствие пользователя, установку его начального состояния,

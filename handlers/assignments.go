@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"fmt"
-	"github.com/IT-Nick/testtypes"
+	"github.com/IT-Nick/database/json"
 	"gopkg.in/telebot.v3"
 	"strings"
 )
@@ -20,7 +20,7 @@ func assignHandler() telebot.HandlerFunc {
 
 		// Если это callback, то загружаем типы тестов и выводим их в виде inline-кнопок.
 		if c.Callback() != nil {
-			testTypes, err := testtypes.LoadTestTypes("data/test_types.json")
+			testTypes, err := json.LoadTestTypes("data/test_types.json")
 			if err != nil {
 				return c.Send("Ошибка загрузки типов тестов.")
 			}

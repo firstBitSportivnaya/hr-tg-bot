@@ -1,4 +1,4 @@
-package pending
+package json
 
 import (
 	"encoding/json"

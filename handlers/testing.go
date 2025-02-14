@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"fmt"
-	"github.com/IT-Nick/testtypes"
+	"github.com/IT-Nick/database/json"
 	"log"
 	"os"
 	"strconv"
@@ -47,9 +47,9 @@ func startTestHandler(bot *telebot.Bot) telebot.HandlerFunc {
 			}
 		}
 
-		ttSettings, err := testtypes.GetTestTypeSettings(assignment.TestType)
+		ttSettings, err := json.GetTestTypeSettings(assignment.TestType)
 		if err != nil {
-			ttSettings = &testtypes.TestType{
+			ttSettings = &json.TestType{
 				TestQuestions: cfg.TestQuestions,
 				TestDuration:  int(cfg.TestDuration.Minutes()),
 			}

@@ -2,10 +2,10 @@ package handlers
 
 import (
 	"fmt"
+	"github.com/IT-Nick/database/json"
 	"strings"
 	"time"
 
-	"github.com/IT-Nick/pending"
 	"gopkg.in/telebot.v3"
 )
 
@@ -43,7 +43,7 @@ func textHandler(bot *telebot.Bot) telebot.HandlerFunc {
 				c.Send(fmt.Sprintf("Кандидату @%s уже назначен тест.", candidateUsername))
 			} else {
 				// Используем выбранный тип теста, который сохранился в состоянии HR.
-				newAssignment := pending.TestAssignment{
+				newAssignment := json.TestAssignment{
 					CandidateID:       0, // Будет заполнен, когда кандидат запустит тест.
 					CandidateUsername: candidateUsername,
 					AssignedByID:      user.ID,
@@ -84,7 +84,7 @@ func textHandler(bot *telebot.Bot) telebot.HandlerFunc {
 				c.Send(fmt.Sprintf("Кандидату @%s уже назначена роль %s.", candidateUsername, existing.NewRole))
 			} else {
 				// Формируем новое назначение роли HR.
-				newRoleAssign := pending.RoleAssignment{
+				newRoleAssign := json.RoleAssignment{
 					CandidateUsername: candidateUsername,
 					NewRole:           "hr",
 					AssignedBy:        user.Username,
@@ -118,7 +118,7 @@ func textHandler(bot *telebot.Bot) telebot.HandlerFunc {
 			} else if exists {
 				c.Send(fmt.Sprintf("Кандидату @%s уже назначена роль %s.", candidateUsername, existing.NewRole))
 			} else {
-				newRoleAssign := pending.RoleAssignment{
+				newRoleAssign := json.RoleAssignment{
 					CandidateUsername: candidateUsername,
 					NewRole:           "admin",
 					AssignedBy:        user.Username,
