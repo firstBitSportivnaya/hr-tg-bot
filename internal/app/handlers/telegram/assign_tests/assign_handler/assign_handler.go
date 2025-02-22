@@ -27,12 +27,12 @@ func NewAssignStartPageHandler(userService *service.UserService, testService *te
 func (h *AssignStartPageHandler) Handle(c telebot.Context) error {
 	userID := c.Sender().ID
 
-	h.mutex.Lock()
+	h.mutex.Lock() // Захватываем мьютекс
 	page := h.pageState[userID]
 	if page == 0 {
-		page = 1
+		page = 1 // Устанавливаем страницу как 1 для первой страницы
 	}
-	h.mutex.Unlock()
+	h.mutex.Unlock() // Освобождаем мьютекс
 
 	pageSize := 3
 

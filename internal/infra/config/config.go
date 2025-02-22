@@ -12,7 +12,8 @@ type Config struct {
 		Port string `yaml:"port"`
 	} `yaml:"server"`
 	TelegramBot struct {
-		Token string `yaml:"token"`
+		Token       string `yaml:"token"`
+		BotUsername string `yaml:"username"`
 	} `yaml:"telegram_bot"`
 	Database struct {
 		Host     string `yaml:"host"`

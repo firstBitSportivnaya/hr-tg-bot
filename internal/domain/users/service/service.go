@@ -148,6 +148,15 @@ func (s *UserService) GetUserByID(ctx context.Context, userID int) (*model.User,
 	return user, nil
 }
 
+// GetUserByTelegramID получает пользователя по ID telegram
+func (s *UserService) GetUserByTelegramID(ctx context.Context, telegramID int64) (*model.User, error) {
+	user, err := s.userRepo.GetUserByTelegramID(ctx, telegramID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user by telegram ID: %w", err)
+	}
+	return user, nil
+}
+
 // GetUserTestByID получает назначение теста по ID
 func (s *UserService) GetUserTestByID(ctx context.Context, userTestID int) (*model.UserTest, error) {
 	userTest, err := s.userRepo.GetUserTestByID(ctx, userTestID)

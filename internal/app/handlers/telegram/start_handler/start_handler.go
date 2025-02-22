@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	messageService "github.com/IT-Nick/internal/domain/messages/service"
+	"github.com/IT-Nick/internal/domain/model"
 	rolesService "github.com/IT-Nick/internal/domain/roles/service"
 	testService "github.com/IT-Nick/internal/domain/tests/service"
 	usersService "github.com/IT-Nick/internal/domain/users/service"
 	"gopkg.in/telebot.v4"
+	"strconv"
+	"strings"
 )
 
 // StartHandler структура для обработки команды /start
@@ -36,7 +39,7 @@ func NewStartHandler(
 // Handle метод, который будет использоваться для обработки команды /start
 func (h *StartHandler) Handle(c telebot.Context) error {
 	username := c.Sender().Username
-	telegramId := c.Sender().ID
+	telegramID := c.Sender().ID
 	telegramFirstName := c.Sender().FirstName
 
 	if username == "" {
@@ -47,7 +50,7 @@ func (h *StartHandler) Handle(c telebot.Context) error {
 	ctx := context.Background()
 
 	// Попытка получить или создать пользователя
-	userID, err := h.userService.GetOrCreateUser(ctx, username, telegramId, telegramFirstName, "user")
+	userID, err := h.userService.GetOrCreateUser(ctx, username, telegramID, telegramFirstName, "user")
 	if err != nil {
 		return c.Send(fmt.Sprintf("Failed to process user: %v", err))
 	}
@@ -57,10 +60,57 @@ func (h *StartHandler) Handle(c telebot.Context) error {
 		return c.Send(fmt.Sprintf("Failed to process user: %v", err))
 	}
 
-	// Проверяем, есть ли назначенный тест
-	assignedTests, err := h.testService.GetAvailableTestsForUser(ctx, username)
-	if err != nil {
-		return c.Send(fmt.Sprintf("Failed to retrieve assigned tests: %v", err))
+	// Проверяем параметры start (например, из ссылки/QR-кода)
+	startParam := c.Data()
+	var testID int
+	var assignedBy string
+	var assignedTests []model.Test
+	if startParam != "" && strings.HasPrefix(startParam, "test_") {
+		parts := strings.Split(startParam, "_")
+		if len(parts) == 4 && parts[0] == "test" {
+			testID, err = strconv.Atoi(parts[1])
+			if err != nil {
+				return c.Send("Неверный формат ID теста в ссылке.")
+			}
+			//token := parts[2]
+			assignedBy = parts[3]
+
+			//// Проверяем токен
+			//valid, err := h.testService.ValidateTestLink(ctx, testID, token)
+			//if err != nil || !valid {
+			//	return c.Send("Недействительная или истекшая ссылка на тест.")
+			//}
+
+			// Проверяем, есть ли назначенные тесты
+			assignedTests, err = h.testService.GetAvailableTestsForUser(ctx, username)
+			if err != nil {
+				return c.Send(fmt.Sprintf("Ошибка при получении тестов: %v", err))
+			}
+
+			if len(assignedTests) == 0 {
+				// Назначаем тест пользователю
+				_, err = h.testService.AssignTestToUser(ctx, userID, testID, assignedBy)
+				if err != nil {
+					// Если пользователь не найден, используем отложенное назначение
+					_, err = h.testService.AssignPendingTest(ctx, username, testID, assignedBy)
+					if err != nil {
+						return c.Send(fmt.Sprintf("Ошибка при создании отложенного назначения теста: %v", err))
+					}
+				}
+
+				// Обновляем список назначенных тестов
+				assignedTests, err = h.testService.GetAvailableTestsForUser(ctx, username)
+				if err != nil {
+					return c.Send(fmt.Sprintf("Ошибка при получении тестов: %v", err))
+				}
+			}
+		}
+	} else {
+		// Если нет параметров start, просто проверяем назначенные тесты
+		assignedTests, err = h.testService.GetAvailableTestsForUser(ctx, username)
+		if err != nil {
+			return c.Send(fmt.Sprintf("Failed to retrieve assigned tests: %v", err))
+		}
 	}
 
 	// Получаем мапу с кнопками для пользователя
@@ -78,7 +128,6 @@ func (h *StartHandler) Handle(c telebot.Context) error {
 	var welcomeMessage string
 	if len(assignedTests) > 0 {
 		// Если тест назначен, используем welcome_message_user
-		// Берем первый назначенный тест
 		test := assignedTests[0]
 		welcomeMessageKey := "welcome_message_user"
 		welcomeMessage, err = h.messageService.GetMessageByKey(ctx, welcomeMessageKey)

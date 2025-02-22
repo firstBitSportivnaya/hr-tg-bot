@@ -43,7 +43,7 @@ func (h *SelectTestHandler) Handle(c tgbotapi.Context) error {
 
 	// Сохраняем выбранный тест в состояние
 	userID := c.Sender().ID
-	h.testState[userID] = testID
+	h.testState[userID] = testID // Сохраняем testID для данного пользователя
 
 	// Дополнительные действия (например, запрос кандидата)
 	return c.Send(fmt.Sprintf("Тест #%d выбран. Введите имя кандидата (например, @username).", testID))

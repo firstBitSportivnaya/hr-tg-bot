@@ -77,6 +77,27 @@ func (s *TestService) AssignPendingTest(ctx context.Context, telegramUsername st
 	return userTestID, nil
 }
 
+// GetLastTestForUserWithFinishStatus  получает список доступных тестов для пользователя со статусом "завершено"
+func (s *TestService) GetLastTestForUserWithFinishStatus(ctx context.Context, username string) (*model.Test, error) {
+	// Получаем пользователя по username
+	user, err := s.userRepo.GetUserByUsername(ctx, username)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+	if user == nil {
+		return nil, fmt.Errorf("user %s not found", username)
+	}
+
+	// Получаем доступные тесты для пользователя
+	test, err := s.testRepo.GetLastTestForUserWithFinishStatus(ctx, user.ID)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get available tests: %w", err)
+	}
+
+	return test, nil
+}
+
 // GetAvailableTestsForUser получает список доступных тестов для пользователя
 func (s *TestService) GetAvailableTestsForUser(ctx context.Context, username string) ([]model.Test, error) {
 	// Получаем пользователя по username
@@ -249,10 +270,10 @@ func (s *TestService) GetUserTestReport(ctx context.Context, userID int) ([]dto.
 			return nil, fmt.Errorf("failed to get test %d: %w", userTest.TestID, err)
 		}
 
-		// Получаем вопросы теста
-		questions, err := s.testRepo.GetQuestionsByTestID(ctx, userTest.TestID)
+		// Получаем выбранные вопросы для теста
+		selectedQuestions, err := s.GetSelectedQuestions(ctx, userTest.ID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get questions for test %d: %w", userTest.TestID, err)
+			return nil, fmt.Errorf("failed to get selected questions for user test %d: %w", userTest.ID, err)
 		}
 
 		// Получаем ответы пользователя
@@ -271,9 +292,9 @@ func (s *TestService) GetUserTestReport(ctx context.Context, userID int) ([]dto.
 			assignedByUsername = assignedByUser.TelegramUsername
 		}
 
-		// Формируем список вопросов с ответами
+		// Формируем список вопросов с ответами только для выбранных вопросов
 		var questionInfos []dto.QuestionInfo
-		for _, q := range questions {
+		for _, q := range selectedQuestions {
 			var userAnswer string
 			var isCorrect bool
 			var answeredAt string
@@ -331,7 +352,7 @@ func (s *TestService) GetUserTestReport(ctx context.Context, userID int) ([]dto.
 			StartTime:      startTime,
 			EndTime:        endTime,
 			CorrectAnswers: userTest.CorrectAnswersCount,
-			TotalQuestions: len(questions),
+			TotalQuestions: len(selectedQuestions),
 			TimerDeadline:  timerDeadline,
 			AssignedBy:     assignedByUsername,
 			Questions:      questionInfos,
@@ -488,4 +509,14 @@ func (s *TestService) GetSelectedQuestions(ctx context.Context, userTestID int) 
 		questions = append(questions, *question)
 	}
 	return questions, nil
+}
+
+// SaveTestLink сохраняет токен для ссылки на тест
+func (s *TestService) SaveTestLink(ctx context.Context, testID int, token string) error {
+	return s.testRepo.SaveTestLink(ctx, testID, token)
+}
+
+// GetTestByID сохраняет токен для ссылки на тест
+func (s *TestService) GetTestByID(ctx context.Context, testID int) (*model.Test, error) {
+	return s.testRepo.GetTestByID(ctx, testID)
 }

@@ -27,18 +27,18 @@ func NewAssignPrevPageHandler(userService *service.UserService, testService *tes
 func (h *AssignPreviousPageHandler) Handle(c telebot.Context) error {
 	userID := c.Sender().ID
 
-	h.mutex.Lock()
+	h.mutex.Lock() // Захватываем мьютекс
 	page := h.pageState[userID]
 	if page == 0 {
-		page = 1
+		page = 1 // Если страница не установлена, начинаем с первой страницы
 	}
-	h.mutex.Unlock()
+	h.mutex.Unlock() // Освобождаем мьютекс
 
 	pageSize := 3
 
 	// Запрашиваем тесты с пагинацией (с учетом корректного смещения)
 	if page > 1 {
-		page--
+		page-- // Переходим на предыдущую страницу
 	}
 
 	// Запрашиваем тесты с пагинацией
@@ -53,7 +53,7 @@ func (h *AssignPreviousPageHandler) Handle(c telebot.Context) error {
 		return c.Send(fmt.Sprintf("Failed to get total test count: %v", err))
 	}
 
-	totalPages := (totalTests + pageSize - 1) / pageSize
+	totalPages := (totalTests + pageSize - 1) / pageSize // вычисляем количество страниц
 
 	// Обновляем текущую страницу в мапе
 	h.mutex.Lock()

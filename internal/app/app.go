@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"github.com/IT-Nick/internal/app/handlers/http/active_tests_handler"
+	"github.com/IT-Nick/internal/app/handlers/http/generate_test_link_handler"
 	"github.com/IT-Nick/internal/app/handlers/http/update_user_role_handler"
 	"github.com/IT-Nick/internal/app/handlers/http/user_test_report_handler"
 	"github.com/IT-Nick/internal/app/handlers/telegram/answer_handler"
@@ -25,7 +26,6 @@ import (
 	"github.com/IT-Nick/internal/infra/timer"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"gopkg.in/telebot.v4"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -55,11 +55,6 @@ type App struct {
 }
 
 func NewApp(configPath string) (*App, error) {
-
-	log.Println("Local time:", time.Now())
-	log.Println("UTC time:", time.Now().UTC())
-	log.Println("Local timezone:", time.Local)
-
 	configImpl, err := config.LoadConfig(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("config.LoadConfig: %w", err)
@@ -109,7 +104,7 @@ func (app *App) ListenAndServeTelegram() error {
 	}
 	app.bot = bot
 
-	app.timerUpdater = timer.NewTimerUpdater(app.bot, app.testService)
+	app.timerUpdater = timer.NewTimerUpdater(app.bot, app.testService, app.userService)
 
 	app.bootstrapHandlersTelegram()
 
@@ -128,8 +123,7 @@ func (app *App) bootstrapHandlersTelegram() {
 			app.testService,
 		).GetHandlerFunc())
 
-	// Обработчики назначения теста кандидату (с обработчиками пагинации).
-	// OnCallback обработчик принимает айди теста.
+	// Обработчики назначения теста кандидату (с обработчиками пагинации). OnCallback обработчик принимает айди теста.
 	app.bot.Handle(&telebot.InlineButton{Unique: "assign_test"},
 		assign_handler.NewAssignStartPageHandler(
 			app.userService,
@@ -177,7 +171,7 @@ func (app *App) bootstrapHandlersTelegram() {
 
 		// Проверяем callback для ответа на вопрос
 		if strings.HasPrefix(cleanedData, "answer_") {
-			return answer_handler.NewAnswerHandler(app.bot, app.testService).Handle(c)
+			return answer_handler.NewAnswerHandler(app.bot, app.testService, app.userService).Handle(c)
 		}
 
 		return nil
@@ -205,9 +199,25 @@ func (app *App) bootstrapHandlersTelegram() {
 func (app *App) ListenAndServeHTTP() error {
 	mx := http.NewServeMux()
 
-	mx.Handle("POST /users/update-role", update_user_role_handler.NewUpdateUserRoleHandler(app.userService, app.roleService))
-	mx.Handle("POST /reports/user", user_test_report_handler.NewUserTestReportHandler(app.userService, app.testService))
-	mx.Handle("GET /reports/active-tests", active_tests_handler.NewActiveTestsHandler(app.userService, app.testService))
+	mx.Handle("POST /users/update-role", update_user_role_handler.NewUpdateUserRoleHandler(
+		app.userService,
+		app.roleService,
+	))
+	mx.Handle("POST /reports/user", user_test_report_handler.NewUserTestReportHandler(
+		app.userService,
+		app.testService,
+	))
+	mx.Handle("GET /reports/active-tests", active_tests_handler.NewActiveTestsHandler(
+		app.userService,
+		app.testService,
+	))
+	mx.Handle("POST /tests/generate-link", generate_test_link_handler.NewGenerateTestLinkHandler(
+		app.testService,
+		app.userService,
+		app.roleService,
+		app.config.TelegramBot.BotUsername,
+		app.config.Server.Host+":"+app.config.Server.Port,
+	))
 
 	app.server = &http.Server{
 		Addr:    fmt.Sprintf("%s:%s", app.config.Server.Host, app.config.Server.Port),

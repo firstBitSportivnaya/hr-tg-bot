@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"github.com/IT-Nick/internal/domain/model"
 	testsService "github.com/IT-Nick/internal/domain/tests/service"
+	usersService "github.com/IT-Nick/internal/domain/users/service"
 	"gopkg.in/telebot.v4"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -14,15 +16,18 @@ import (
 type AnswerHandler struct {
 	bot         *telebot.Bot
 	testService *testsService.TestService
+	userService *usersService.UserService
 }
 
 func NewAnswerHandler(
 	bot *telebot.Bot,
 	testService *testsService.TestService,
+	userService *usersService.UserService,
 ) *AnswerHandler {
 	return &AnswerHandler{
 		bot:         bot,
 		testService: testService,
+		userService: userService,
 	}
 }
 
@@ -68,6 +73,7 @@ func (h *AnswerHandler) sendQuestion(recipient *telebot.User, question model.Que
 
 func (h *AnswerHandler) Handle(c telebot.Context) error {
 	telegramID := c.Sender().ID
+	username := c.Sender().Username
 	callbackData := c.Callback().Data
 
 	// Очищаем callbackData от нестандартных символов
@@ -142,7 +148,8 @@ func (h *AnswerHandler) Handle(c telebot.Context) error {
 	// Проверяем правильность ответа
 	isCorrect := false
 	if len(currentQuestion.TestOptions) > optionIndex {
-		isCorrect = currentQuestion.TestOptions[optionIndex] == currentQuestion.CorrectAnswer
+		// Предполагаем, что правильный ответ хранится в вопросе (например, в отдельном поле CorrectAnswer)
+		isCorrect = currentQuestion.TestOptions[optionIndex] == currentQuestion.CorrectAnswer // Заглушка
 	}
 
 	// Сохраняем ответ в таблицу answers
@@ -176,6 +183,29 @@ func (h *AnswerHandler) Handle(c telebot.Context) error {
 		// Тест завершен
 		err = h.testService.UpdateUserTestStatus(ctx, userTestID, "finished")
 		err = h.testService.UpdateUserTestEndTime(ctx, userTestID, time.Now())
+
+		// Получаем пользователя, который назначил тест
+		userTest, err := h.userService.GetUserTestByID(ctx, userTestID)
+		if err != nil {
+			return c.Respond(&telebot.CallbackResponse{
+				Text: fmt.Sprintf("Ошибка при получении информации о назначившем пользователе: %v", err),
+			})
+		}
+		assignedByTgId, err := h.userService.GetUserByID(ctx, userTest.AssignedBy)
+		if err != nil {
+			return c.Respond(&telebot.CallbackResponse{
+				Text: fmt.Sprintf("Ошибка при получении информации о назначившем пользователе: %v", err),
+			})
+		}
+		test, err := h.testService.GetLastTestForUserWithFinishStatus(ctx, username)
+		if err != nil {
+			log.Printf("failed to get last test for user %s: %v", username, err)
+		}
+		// Отправляем сообщение о завершении теста пользователю assigned_by
+		_, err = h.bot.Send(&telebot.User{ID: *assignedByTgId.TelegramID}, fmt.Sprintf("⚡️ Кандидат *%s* завершил выполнение теста *%s*.", username, test.TestName), &telebot.SendOptions{
+			ParseMode: telebot.ModeMarkdown,
+		})
+
 		if err != nil {
 			return fmt.Errorf("failed to update test status: %w", err)
 		}

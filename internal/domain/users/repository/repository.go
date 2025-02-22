@@ -55,6 +55,25 @@ func (r *UserRepository) UpdateUserRole(ctx context.Context, username string, ro
 	return userID, nil
 }
 
+// GetUserByTelegramID получает пользователя по ID telegram
+func (r *UserRepository) GetUserByTelegramID(ctx context.Context, telegramID int64) (*model.User, error) {
+	query := `
+        SELECT id, role_id, telegram_id, telegram_username, telegram_first_name, real_first_name, 
+               real_second_name, real_surname, current_state, created_at, updated_at
+        FROM users
+        WHERE telegram_id = $1
+    `
+	var user model.User
+	err := r.db.QueryRow(ctx, query, telegramID).Scan(
+		&user.ID, &user.RoleID, &user.TelegramID, &user.TelegramUsername, &user.TelegramFirstName, &user.RealFirstName,
+		&user.RealSecondName, &user.RealSurname, &user.CurrentState, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user by ID: %w", err)
+	}
+	return &user, nil
+}
+
 // GetUserByID получает пользователя по ID
 func (r *UserRepository) GetUserByID(ctx context.Context, userID int) (*model.User, error) {
 	query := `

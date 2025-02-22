@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/IT-Nick/internal/domain/model"
 	"github.com/jackc/pgx/v5"
@@ -85,6 +86,35 @@ func (r *TestRepository) AssignPendingTest(ctx context.Context, telegramUsername
 		return 0, fmt.Errorf("failed to assign pending test: %w", err)
 	}
 	return userTestID, nil
+}
+
+// GetLastTestForUserWithFinishStatus получает последний завершённый тест для пользователя со статусом "finished"
+func (r *TestRepository) GetLastTestForUserWithFinishStatus(ctx context.Context, userID int) (*model.Test, error) {
+	query := `
+        SELECT t.id, t.test_name, t.test_type, t.duration, t.question_count
+        FROM tests t
+        JOIN user_tests ut ON t.id = ut.test_id
+        WHERE ut.user_id = $1 AND ut.status = 'finished'
+        ORDER BY ut.created_at DESC
+        LIMIT 1
+    `
+
+	var test model.Test
+	err := r.db.QueryRow(ctx, query, userID).Scan(
+		&test.ID,
+		&test.TestName,
+		&test.TestType,
+		&test.Duration,
+		&test.QuestionCount,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to query last finished test: %w", err)
+	}
+
+	return &test, nil
 }
 
 // GetAvailableTestsForUser получает список доступных тестов для пользователя
@@ -718,4 +748,16 @@ func (r *TestRepository) GetSelectedQuestionIDs(ctx context.Context, userTestID 
 		questionIDs[i] = int(elem)
 	}
 	return questionIDs, nil
+}
+
+func (r *TestRepository) SaveTestLink(ctx context.Context, testID int, token string) error {
+	query := `
+        INSERT INTO test_links (test_id, token, created_at)
+        VALUES ($1, $2, CURRENT_TIMESTAMP)
+    `
+	_, err := r.db.Exec(ctx, query, testID, token)
+	if err != nil {
+		return fmt.Errorf("failed to save test link: %w", err)
+	}
+	return nil
 }

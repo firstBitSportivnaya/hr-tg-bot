@@ -221,7 +221,7 @@ func (h *StartTestHandler) Handle(c telebot.Context) error {
 
 	// Обновляем сообщение таймера перед отправкой первого вопроса
 	currentQuestionIndex := 0
-	totalQuestions := test.QuestionCount
+	totalQuestions := test.QuestionCount // Используем question_count из теста
 	timeLeft := time.Until(userTest.TimerDeadline)
 	minutes := int(timeLeft.Minutes())
 	seconds := int(timeLeft.Seconds()) % 60
