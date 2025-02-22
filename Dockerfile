@@ -7,7 +7,7 @@ RUN go mod download
 
 COPY . .
 
-ENV CONFIG_PATH=configs/values_local_docker.yaml
+ENV CONFIG_PATH=configs/values_local.yaml
 
 RUN go build -o /build ./cmd/server
 

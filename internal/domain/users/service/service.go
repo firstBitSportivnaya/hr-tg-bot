@@ -21,7 +21,7 @@ func NewUserService(userRepo *repository.UserRepository, rolePermissionRepo *rol
 }
 
 // GetOrCreateUser возвращает ID пользователя, если он существует, или создает нового
-func (s *UserService) GetOrCreateUser(ctx context.Context, username string, roleName string) (int, error) {
+func (s *UserService) GetOrCreateUser(ctx context.Context, username string, telegramId int64, TelegramFirstName string, roleName string) (int, error) {
 	// Получаем ID роли по имени
 	role, err := s.rolePermissionRepo.GetRoleByRoleName(ctx, roleName)
 	if err != nil {
@@ -40,7 +40,7 @@ func (s *UserService) GetOrCreateUser(ctx context.Context, username string, role
 	}
 
 	// Если пользователь не существует, создаем нового с RoleID
-	userID, err := s.userRepo.CreateUser(ctx, username, role.ID)
+	userID, err := s.userRepo.CreateUser(ctx, username, telegramId, TelegramFirstName, role.ID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create user: %w", err)
 	}
@@ -137,4 +137,22 @@ func (s *UserService) UpdateUserRole(ctx context.Context, username string, roleN
 	}
 
 	return userID, nil
+}
+
+// GetUserByID получает пользователя по ID
+func (s *UserService) GetUserByID(ctx context.Context, userID int) (*model.User, error) {
+	user, err := s.userRepo.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user by ID: %w", err)
+	}
+	return user, nil
+}
+
+// GetUserTestByID получает назначение теста по ID
+func (s *UserService) GetUserTestByID(ctx context.Context, userTestID int) (*model.UserTest, error) {
+	userTest, err := s.userRepo.GetUserTestByID(ctx, userTestID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user test by ID: %w", err)
+	}
+	return userTest, nil
 }

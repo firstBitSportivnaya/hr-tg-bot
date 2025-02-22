@@ -6,8 +6,8 @@ telegram_bot:
   token: "your-telegram-bot-token"
 
 database:
-  host: "localhost"
+  host: "db"
   port: "5432"
-  user: "your-db-user"
-  password: "your-db-password"
-  dbname: "your-db-name"
+  user: "postgres"
+  password: "postgres"
+  dbname: "bot_db"

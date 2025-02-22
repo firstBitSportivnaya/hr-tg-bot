@@ -2,7 +2,10 @@ package app
 
 import (
 	"fmt"
+	"github.com/IT-Nick/internal/app/handlers/http/active_tests_handler"
 	"github.com/IT-Nick/internal/app/handlers/http/update_user_role_handler"
+	"github.com/IT-Nick/internal/app/handlers/http/user_test_report_handler"
+	"github.com/IT-Nick/internal/app/handlers/telegram/answer_handler"
 	"github.com/IT-Nick/internal/app/handlers/telegram/assign_tests/assign_handler"
 	"github.com/IT-Nick/internal/app/handlers/telegram/assign_tests/assign_next_page_handler"
 	"github.com/IT-Nick/internal/app/handlers/telegram/assign_tests/assign_prev_page_handler"
@@ -10,26 +13,27 @@ import (
 	"github.com/IT-Nick/internal/app/handlers/telegram/assign_tests/select_test_handler"
 	"github.com/IT-Nick/internal/app/handlers/telegram/start_handler"
 	"github.com/IT-Nick/internal/app/handlers/telegram/start_test_handler"
-	rolesRepo "github.com/IT-Nick/internal/domain/roles/repository"
-	rolesService "github.com/IT-Nick/internal/domain/roles/service"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"gopkg.in/telebot.v4"
-	"net/http"
-	"strings"
-
 	msgRepo "github.com/IT-Nick/internal/domain/messages/repository"
 	msgService "github.com/IT-Nick/internal/domain/messages/service"
+	rolesRepo "github.com/IT-Nick/internal/domain/roles/repository"
+	rolesService "github.com/IT-Nick/internal/domain/roles/service"
 	testsRepo "github.com/IT-Nick/internal/domain/tests/repository"
 	testsService "github.com/IT-Nick/internal/domain/tests/service"
 	"github.com/IT-Nick/internal/domain/users/repository"
 	"github.com/IT-Nick/internal/domain/users/service"
 	"github.com/IT-Nick/internal/infra/config"
+	"github.com/IT-Nick/internal/infra/timer"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"gopkg.in/telebot.v4"
+	"log"
+	"net/http"
+	"strings"
 	"time"
 )
 
 type LocalStatesHelpers struct {
-	pageState map[int64]int
-	testState map[int64]int
+	pageState       map[int64]int
+	assignTestState map[int64]int
 }
 
 type Services struct {
@@ -40,16 +44,22 @@ type Services struct {
 }
 
 type App struct {
-	config *config.Config
-	bot    *telebot.Bot
-	db     *pgxpool.Pool
-	server *http.Server
+	config       *config.Config
+	bot          *telebot.Bot
+	db           *pgxpool.Pool
+	server       *http.Server
+	timerUpdater *timer.Updater
 
 	Services
 	states LocalStatesHelpers
 }
 
 func NewApp(configPath string) (*App, error) {
+
+	log.Println("Local time:", time.Now())
+	log.Println("UTC time:", time.Now().UTC())
+	log.Println("Local timezone:", time.Local)
+
 	configImpl, err := config.LoadConfig(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("config.LoadConfig: %w", err)
@@ -64,13 +74,12 @@ func NewApp(configPath string) (*App, error) {
 		config: configImpl,
 		db:     db,
 		states: LocalStatesHelpers{
-			pageState: make(map[int64]int),
-			testState: make(map[int64]int),
+			pageState:       make(map[int64]int),
+			assignTestState: make(map[int64]int),
 		},
 	}
 
 	app.initServices()
-
 	return app, nil
 }
 
@@ -100,6 +109,8 @@ func (app *App) ListenAndServeTelegram() error {
 	}
 	app.bot = bot
 
+	app.timerUpdater = timer.NewTimerUpdater(app.bot, app.testService)
+
 	app.bootstrapHandlersTelegram()
 
 	go app.bot.Start()
@@ -109,12 +120,34 @@ func (app *App) ListenAndServeTelegram() error {
 
 // bootstrapHandlersTelegram - регистрирует обработчики для бота
 func (app *App) bootstrapHandlersTelegram() {
-	app.bot.Handle("/start", start_handler.NewStartHandler(app.userService, app.messageService, app.roleService).GetHandlerFunc())
+	app.bot.Handle("/start",
+		start_handler.NewStartHandler(
+			app.userService,
+			app.messageService,
+			app.roleService,
+			app.testService,
+		).GetHandlerFunc())
 
-	// Обработчики назначения теста кандидату (с обработчиками пагинации). OnCallback обработчик принимает айди теста.
-	app.bot.Handle(&telebot.InlineButton{Unique: "assign_test"}, assign_handler.NewAssignStartPageHandler(app.userService, app.testService, app.states.pageState).GetHandlerFunc())
-	app.bot.Handle(&telebot.InlineButton{Unique: "next_page"}, assign_next_page_handler.NewAssignNextPageHandler(app.userService, app.testService, app.states.pageState).GetHandlerFunc())
-	app.bot.Handle(&telebot.InlineButton{Unique: "prev_page"}, assign_prev_page_handler.NewAssignPrevPageHandler(app.userService, app.testService, app.states.pageState).GetHandlerFunc())
+	// Обработчики назначения теста кандидату (с обработчиками пагинации).
+	// OnCallback обработчик принимает айди теста.
+	app.bot.Handle(&telebot.InlineButton{Unique: "assign_test"},
+		assign_handler.NewAssignStartPageHandler(
+			app.userService,
+			app.testService,
+			app.states.pageState,
+		).GetHandlerFunc())
+	app.bot.Handle(&telebot.InlineButton{Unique: "next_page"},
+		assign_next_page_handler.NewAssignNextPageHandler(
+			app.userService,
+			app.testService,
+			app.states.pageState,
+		).GetHandlerFunc())
+	app.bot.Handle(&telebot.InlineButton{Unique: "prev_page"},
+		assign_prev_page_handler.NewAssignPrevPageHandler(
+			app.userService,
+			app.testService,
+			app.states.pageState,
+		).GetHandlerFunc())
 	app.bot.Handle(&telebot.InlineButton{Unique: "start_page"}, func(c telebot.Context) error {
 		if c.Sender() != nil {
 			return c.Send("Вы находитесь в начале списка.")
@@ -128,42 +161,53 @@ func (app *App) bootstrapHandlersTelegram() {
 		return nil
 	})
 	app.bot.Handle(telebot.OnCallback, func(c telebot.Context) error {
-		data := c.Callback().Data // Получаем данные callback
+		data := c.Callback().Data
 
-		// Очищаем данные от нестандартных символов
 		cleanedData := strings.TrimSpace(data)
-		cleanedData = strings.ReplaceAll(cleanedData, "\f", "")  // Удаляем символ form feed
-		cleanedData = strings.ReplaceAll(cleanedData, "\\f", "") // Удаляем экранированный символ, если он есть
+		cleanedData = strings.ReplaceAll(cleanedData, "\f", "")
+		cleanedData = strings.ReplaceAll(cleanedData, "\\f", "")
 
 		// Проверяем, начинается ли callback с "test_"
 		if strings.HasPrefix(cleanedData, "test_") {
-			return select_test_handler.NewSelectTestHandler(app.userService, app.testService, app.states.testState).Handle(c)
+			return select_test_handler.NewSelectTestHandler(
+				app.userService,
+				app.testService,
+				app.states.assignTestState).Handle(c)
+		}
+
+		// Проверяем callback для ответа на вопрос
+		if strings.HasPrefix(cleanedData, "answer_") {
+			return answer_handler.NewAnswerHandler(app.bot, app.testService).Handle(c)
 		}
 
 		return nil
 	})
 
-	app.bot.Handle(telebot.OnText, assign_test_handler.NewAssignTestHandler(app.userService, app.testService, app.states.testState).GetHandlerFunc())
+	app.bot.Handle(telebot.OnText,
+		assign_test_handler.NewAssignTestHandler(
+			app.userService,
+			app.testService,
+			app.states.assignTestState,
+		).GetHandlerFunc())
 
 	// Обработчик запуска теста (с логикой нахождения назначенных тестов кандидату)
 	app.bot.Handle(&telebot.InlineButton{Unique: "start_test"},
-		start_test_handler.NewStartTestHandler(app.testService, app.messageService, app.states.testState).GetHandlerFunc())
-
-	//app.bot.Handle(telebot.OnText, text_handler.NewTextHandler(app.bot))
-	//app.bot.Handle(&telebot.InlineButton{Unique: "start_test"}, start_test_handler.NewStartTestHandler(app.bot))
-	//app.bot.Handle(&telebot.InlineButton{Unique: "assign_test"}, assign_handler.NewAssignHandler())
-	//app.bot.Handle(&telebot.InlineButton{Unique: "select_test_type"}, select_test_type_handler.NewSelectTestTypeHandler(app.bot))
-	//app.bot.Handle(&telebot.InlineButton{Unique: "assign_hr"}, assign_hr_handler.NewAssignHRHandler())
-	//app.bot.Handle(&telebot.InlineButton{Unique: "assign_admin"}, assign_admin_handler.NewAssignAdminHandler())
-
-	//app.bot.Use(middlewares.NewTimerMiddleware)
+		start_test_handler.NewStartTestHandler(
+			app.bot,
+			app.testService,
+			app.messageService,
+			app.userService,
+			app.timerUpdater,
+		).GetHandlerFunc())
 }
 
 // ListenAndServeHTTP запускает HTTP сервер
 func (app *App) ListenAndServeHTTP() error {
 	mx := http.NewServeMux()
 
-	mx.Handle("POST /users/update_role", update_user_role_handler.NewUpdateUserRoleHandler(app.userService, app.roleService))
+	mx.Handle("POST /users/update-role", update_user_role_handler.NewUpdateUserRoleHandler(app.userService, app.roleService))
+	mx.Handle("POST /reports/user", user_test_report_handler.NewUserTestReportHandler(app.userService, app.testService))
+	mx.Handle("GET /reports/active-tests", active_tests_handler.NewActiveTestsHandler(app.userService, app.testService))
 
 	app.server = &http.Server{
 		Addr:    fmt.Sprintf("%s:%s", app.config.Server.Host, app.config.Server.Port),

@@ -1,0 +1,33 @@
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  revive:
+    ignore-generated-header: true
+  gocyclo:
+    min-complexity: 10
+  gofmt:
+    simplify: true
+  staticcheck:
+    checks: ["all"]
+  govet: {}
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - staticcheck
+    - revive
+    - gocyclo
+    - gofmt
+    - unused
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+  issues-exit-code: 1
+  tests: true
+
+output:
+  formats:
+    - format: colored-line-number
