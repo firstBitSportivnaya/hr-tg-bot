@@ -3,7 +3,9 @@ module github.com/IT-Nick
 go 1.23
 
 require (
+	github.com/google/uuid v1.1.2
 	github.com/jackc/pgx/v5 v5.7.2
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	gopkg.in/telebot.v4 v4.0.0-beta.4
 	gopkg.in/yaml.v3 v3.0.1
 )
